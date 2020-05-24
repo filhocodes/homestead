@@ -145,10 +145,29 @@ class Homestead
       end
       settings['keys'].each do |key|
         if File.exist? File.expand_path(key)
+          expanded_path = File.expand_path(key)
+          key_destination = key.split('/').last
+          key_directory = ''
+          
+          if settings.include?('keys_path') && settings['keys_path'] == 'preserve'
+            ssh_home_folder = File.expand_path("~/.ssh")
+            if expanded_path.start_with? ssh_home_folder
+              key_directory = expanded_path[(ssh_home_folder.length+1)..(-1*(key_destination.length+1))]
+            end
+          end
+
           config.vm.provision 'shell' do |s|
             s.privileged = false
-            s.inline = "echo \"$1\" > /home/vagrant/.ssh/$2 && chmod 600 /home/vagrant/.ssh/$2"
-            s.args = [File.read(File.expand_path(key)), key.split('/').last]
+            s.inline = <<-BASH
+                if [ -n "$2" ]; then
+                    mkdir -vp "/home/vagrant/.ssh/$2"
+                    chmod -v 700 "/home/vagrant/.ssh/$2"
+                fi
+
+                echo "$1" > "/home/vagrant/.ssh/$2$3"
+                chmod -v 600 "/home/vagrant/.ssh/$2$3"
+            BASH
+            s.args = [File.read(expanded_path), key_directory, key_destination]
           end
         else
           puts 'Check your Homestead.yaml (or Homestead.json) file, the path to your private key does not exist.'
